@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15101f">
+<title>Le Mur</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%93%B8%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Écran 1 : bienvenue + consentement -->
+<section id="s-welcome" class="wrap" hidden>
+  <h1 id="evt">La soirée</h1>
+  <p class="sub">Un mur partagé en direct : photos, dessins, petits mots. Tout le monde le voit, tout de suite.</p>
+  <div class="card stack">
+    <input id="name" type="text" maxlength="30" placeholder="Ton prénom (ou pseudo)" autocomplete="given-name">
+    <label class="row"><input id="ok" type="checkbox" style="margin-top:3px">
+      <span>J'accepte que mes photos et mes mots apparaissent sur le mur de la soirée, visible par les invités. Je peux supprimer mes publications quand je veux. Tout est effacé automatiquement après <b id="purge">30</b> jours.</span></label>
+    <button id="go" class="btn" disabled>C'est parti 🎉</button>
+  </div>
+  <p class="hint">Pas de compte, aucune donnée personnelle demandée.</p>
+</section>
+
+<!-- Écran 2 : accueil -->
+<section id="s-home" class="wrap" hidden>
+  <h1>Salut <span id="hello"></span> 👋</h1>
+  <p class="sub" id="evt2"></p>
+  <div class="stack">
+    <div class="card defi"><b>Défi du moment</b><p id="defi"></p><button id="otherDefi" class="btn small alt">Un autre défi 🎲</button></div>
+    <button id="bSelfie" class="btn">📸 Selfie</button>
+    <button id="bGallery" class="btn alt">🖼️ Une photo de ma galerie</button>
+    <button id="bNote" class="btn yellow">✍️ Écrire / dessiner un mot</button>
+    <a class="btn alt" href="/mur">👀 Voir le mur</a>
+  </div>
+  <input id="fSelfie" type="file" accept="image/*" capture="user" hidden>
+  <input id="fGallery" type="file" accept="image/*" hidden>
+  <p class="hint" style="text-align:center;margin-top:18px"><a href="#" id="changeName" style="color:var(--muted)">Changer de prénom</a></p>
+</section>
+
+<!-- Écran 3 : éditeur -->
+<section id="s-edit" hidden>
+  <div class="topbar"><button id="back" class="pill">← Retour</button><b id="editTitle">Ta création</b><span style="width:70px"></span></div>
+  <div class="wrap" style="padding-top:12px">
+    <div class="stage"><canvas id="cv" width="960" height="1200"></canvas></div>
+
+    <div id="bgRow" class="tools" hidden></div>
+
+    <div class="tools" id="toolRow">
+      <button class="chip on" id="tDraw" title="Dessiner">✏️</button>
+      <button class="chip" id="tMove" title="Déplacer les emojis">✋</button>
+      <button class="chip" id="tUndo" title="Annuler">↩️</button>
+      <button class="chip" id="tEmoji" title="Emojis">😀</button>
+      <span id="swatches" style="display:contents"></span>
+    </div>
+    <div class="tools" id="sizeRow">
+      <button class="chip" data-w="6"><span style="width:6px;height:6px;border-radius:50%;background:#fff;display:block"></span></button>
+      <button class="chip on" data-w="14"><span style="width:14px;height:14px;border-radius:50%;background:#fff;display:block"></span></button>
+      <button class="chip" data-w="30"><span style="width:26px;height:26px;border-radius:50%;background:#fff;display:block"></span></button>
+      <span id="selTools" style="display:none">
+        <button class="chip" id="sMinus">➖</button><button class="chip" id="sPlus">➕</button><button class="chip" id="sDel">🗑️</button>
+      </span>
+    </div>
+    <div id="emojis" class="emojis" hidden></div>
+    <p class="hint" id="hint">Dessine avec le doigt. Touche 😀 pour ajouter des emojis, puis ✋ pour les déplacer.</p>
+
+    <textarea id="text" rows="2" maxlength="280" placeholder="Ton petit mot…" style="margin-top:6px"></textarea>
+  </div>
+  <div class="bar"><button id="post" class="btn">Poster sur le mur 🚀</button></div>
+</section>
+
+<script src="/common.js"></script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const show = (id) => ['s-welcome', 's-home', 's-edit'].forEach((s) => { $(s).hidden = s !== id; window.scrollTo(0, 0); });
+
+  let cfg = { eventName: 'La soirée', purgeDays: 30 };
+  try { cfg = await Mur.config(); } catch (_) {}
+  document.title = cfg.eventName + ' — Le Mur';
+  $('evt').textContent = cfg.eventName; $('evt2').textContent = cfg.eventName;
+  $('purge').textContent = cfg.purgeDays || 30;
+
+  /* ----- Bienvenue ----- */
+  const name0 = Mur.LS('mur_name');
+  const check = () => { $('go').disabled = !($('ok').checked && $('name').value.trim()); };
+  $('name').oninput = check; $('ok').onchange = check;
+  $('go').onclick = () => { Mur.LS('mur_name', $('name').value.trim().slice(0, 30)); Mur.LS('mur_ok', '1'); home(); };
+  $('changeName').onclick = (e) => { e.preventDefault(); $('name').value = Mur.LS('mur_name') || ''; $('ok').checked = true; check(); show('s-welcome'); };
+
+  /* ----- Accueil ----- */
+  let curDefi = Mur.defi();
+  const home = () => { $('hello').textContent = Mur.LS('mur_name') || ''; $('defi').textContent = curDefi; show('s-home'); };
+  $('otherDefi').onclick = () => { curDefi = Mur.defi(curDefi); $('defi').textContent = curDefi; };
+  if (name0 && Mur.LS('mur_ok')) home(); else show('s-welcome');
+
+  $('bSelfie').onclick = () => $('fSelfie').click();
+  $('bGallery').onclick = () => $('fGallery').click();
+  $('fSelfie').onchange = (e) => pickPhoto(e.target);
+  $('fGallery').onchange = (e) => pickPhoto(e.target);
+  $('bNote').onclick = () => startEditor('note');
+
+  /* ----- Éditeur ----- */
+  const W = 960, H = 1200;
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const COLORS = ['#ffffff', '#111111', '#ff3b5c', '#ff9f1c', '#ffd23f', '#36d6b5', '#2f8bff', '#a06bff'];
+  const BGS = ['#fff7d6', '#ffd9e6', '#d6f5ee', '#dbe8ff', '#ece0ff', '#ffe3c4', '#1b1626'];
+  const EMOJIS = '😀😂🥳😍😎🤪😜🥰🤩😇🤗😅😭🤯😱🙃👍👏🙌🎉🎂🎈🎁🍕🍔🍟🍺🍾🥂🍰🍩❤️💖🔥✨⭐🌈💃🕺🎵🎶🎧🎤🦄🐶🐱🐸🦋🌸🌴☀️🌙'.match(/(\p{Extended_Pictographic}️?(‍\p{Extended_Pictographic}️?)*)/gu);
+
+  let S;
+  const reset = (mode) => {
+    S = { mode, bg: '#fff7d6', img: null, strokes: [], stickers: [], acts: [], tool: 'draw', color: '#111111', w: 14, sel: null };
+  };
+  const redraw = (withSel = true) => {
+    ctx.fillStyle = S.bg; ctx.fillRect(0, 0, W, H);
+    if (S.img) {
+      const iw = S.img.width, ih = S.img.height, k = Math.max(W / iw, H / ih);
+      const dw = iw * k, dh = ih * k;
+      ctx.drawImage(S.img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const s of S.strokes) {
+      ctx.strokeStyle = s.c; ctx.fillStyle = s.c; ctx.lineWidth = s.w;
+      if (s.pts.length === 1) { ctx.beginPath(); ctx.arc(s.pts[0][0], s.pts[0][1], s.w / 2, 0, 7); ctx.fill(); continue; }
+      ctx.beginPath(); ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i][0], s.pts[i][1]);
+      ctx.stroke();
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const st of S.stickers) {
+      ctx.font = st.s + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+      ctx.fillText(st.e, st.x, st.y);
+    }
+    if (withSel && S.sel) {
+      ctx.save(); ctx.setLineDash([14, 10]); ctx.lineWidth = 4; ctx.strokeStyle = '#ff5d8f';
+      const r = S.sel.s * 0.62; ctx.strokeRect(S.sel.x - r, S.sel.y - r, r * 2, r * 2); ctx.restore();
+    }
+  };
+  const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+
+  let cur = null, drag = null;
+  cv.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    const [x, y] = pos(e);
+    if (S.tool === 'draw') {
+      cur = { c: S.color, w: S.w, pts: [[x, y]] }; S.strokes.push(cur); redraw();
+    } else {
+      let hit = null;
+      for (let i = S.stickers.length - 1; i >= 0; i--) { const st = S.stickers[i]; if (Math.hypot(st.x - x, st.y - y) < st.s * 0.65) { hit = st; break; } }
+      S.sel = hit; drag = hit ? { dx: hit.x - x, dy: hit.y - y } : null;
+      $('selTools').style.display = hit ? 'contents' : 'none'; redraw();
+    }
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const [x, y] = pos(e);
+    if (cur) { cur.pts.push([x, y]); redraw(); }
+    else if (drag && S.sel) { S.sel.x = x + drag.dx; S.sel.y = y + drag.dy; redraw(); }
+  });
+  const end = () => { if (cur) { S.acts.push('stroke'); cur = null; } drag = null; };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+  const setTool = (t) => {
+    S.tool = t; $('tDraw').classList.toggle('on', t === 'draw'); $('tMove').classList.toggle('on', t === 'move');
+    if (t === 'draw') { S.sel = null; $('selTools').style.display = 'none'; redraw(); }
+    $('hint').textContent = t === 'draw' ? 'Dessine avec le doigt. Touche 😀 pour ajouter des emojis.' : 'Glisse un emoji pour le déplacer, ➖ ➕ pour sa taille, 🗑️ pour l\'enlever.';
+  };
+  $('tDraw').onclick = () => setTool('draw');
+  $('tMove').onclick = () => setTool('move');
+  $('tUndo').onclick = () => {
+    const a = S.acts.pop(); if (!a) return;
+    if (a === 'stroke') S.strokes.pop(); else { S.stickers.pop(); S.sel = null; $('selTools').style.display = 'none'; }
+    redraw();
+  };
+  $('tEmoji').onclick = () => { const b = $('emojis'); b.hidden = !b.hidden; };
+
+  /* palette */
+  COLORS.forEach((c) => {
+    const b = document.createElement('button'); b.className = 'sw'; b.style.background = c;
+    b.onclick = () => { S.color = c; setTool('draw'); document.querySelectorAll('#swatches .sw').forEach((x) => x.classList.toggle('on', x === b)); };
+    $('swatches').appendChild(b);
+  });
+  const markSw = () => document.querySelectorAll('#swatches .sw').forEach((x, i) => x.classList.toggle('on', COLORS[i] === S.color));
+  document.querySelectorAll('#sizeRow [data-w]').forEach((b) => b.onclick = () => {
+    S.w = +b.dataset.w; setTool('draw'); document.querySelectorAll('#sizeRow [data-w]').forEach((x) => x.classList.toggle('on', x === b));
+  });
+  /* emojis */
+  (EMOJIS || []).forEach((e) => {
+    const b = document.createElement('button'); b.textContent = e;
+    b.onclick = () => {
+      const st = { e, x: W / 2 + (Math.random() - .5) * 200, y: H / 2 + (Math.random() - .5) * 240, s: 220 };
+      S.stickers.push(st); S.acts.push('sticker'); S.sel = st; setTool('move');
+      $('selTools').style.display = 'contents'; $('emojis').hidden = true; redraw();
+    };
+    $('emojis').appendChild(b);
+  });
+  $('sMinus').onclick = () => { if (S.sel) { S.sel.s = Math.max(70, S.sel.s - 40); redraw(); } };
+  $('sPlus').onclick = () => { if (S.sel) { S.sel.s = Math.min(700, S.sel.s + 40); redraw(); } };
+  $('sDel').onclick = () => {
+    if (!S.sel) return; const i = S.stickers.indexOf(S.sel); if (i >= 0) S.stickers.splice(i, 1);
+    S.sel = null; $('selTools').style.display = 'none';
+    const k = S.acts.lastIndexOf('sticker'); if (k >= 0) S.acts.splice(k, 1); redraw();
+  };
+  /* fonds (mode mot) */
+  BGS.forEach((c) => {
+    const b = document.createElement('button'); b.className = 'sw'; b.style.background = c;
+    b.onclick = () => { S.bg = c; if (c === '#1b1626' && S.color === '#111111') { S.color = '#ffffff'; markSw(); } redraw(); };
+    $('bgRow').appendChild(b);
+  });
+
+  const startEditor = (mode, bmp) => {
+    reset(mode); S.img = bmp || null;
+    $('bgRow').hidden = mode !== 'note';
+    $('editTitle').textContent = mode === 'note' ? 'Un petit mot' : 'Ta photo';
+    $('text').placeholder = mode === 'note' ? 'Écris ton mot pour le livre d\'or…' : 'Une légende ? (facultatif)';
+    $('text').value = ''; $('emojis').hidden = true; $('selTools').style.display = 'none';
+    if (mode === 'photo') { S.color = '#ffffff'; }
+    markSw(); setTool('draw'); redraw(); show('s-edit');
+  };
+  $('back').onclick = () => { if (!S.strokes.length && !S.stickers.length && !$('text').value || confirm('Abandonner cette création ?')) home(); };
+
+  async function pickPhoto(input) {
+    const f = input.files && input.files[0]; input.value = '';
+    if (!f) return;
+    try {
+      let bmp;
+      try { bmp = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+      catch (_) {
+        bmp = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = URL.createObjectURL(f); });
+      }
+      startEditor('photo', bmp);
+    } catch (_) { Mur.toast("Impossible de lire cette photo. Essaie-en une autre."); }
+  }
+
+  /* ----- Envoi ----- */
+  let busy = false;
+  $('post').onclick = async () => {
+    if (busy) return;
+    const text = $('text').value.trim();
+    const touched = S.strokes.length || S.stickers.length || S.mode === 'photo';
+    if (S.mode === 'note' && !text && !touched) return Mur.toast('Écris un mot ou fais un dessin 🙂');
+    busy = true; $('post').disabled = true; $('post').textContent = 'Envoi…';
+    try {
+      S.sel = null; redraw(false);
+      const body = { name: Mur.LS('mur_name') || 'Anonyme', text, owner: Mur.owner() };
+      if (S.mode === 'photo' || S.strokes.length || S.stickers.length || S.bg !== '#fff7d6') body.image = cv.toDataURL('image/jpeg', 0.82);
+      if (S.mode === 'note' && text && !S.strokes.length && !S.stickers.length && S.bg === '#fff7d6') delete body.image;
+      const r = await Mur.api('/api/posts', { method: 'POST', body: JSON.stringify(body) });
+      Mur.addMine(r.post.id);
+      location.href = '/mur?new=' + encodeURIComponent(r.post.id);
+    } catch (e) {
+      Mur.toast(e.message || 'Échec de l\'envoi. Vérifie ta connexion et réessaie.', 4000);
+      busy = false; $('post').disabled = false; $('post').textContent = 'Poster sur le mur 🚀'; redraw();
+    }
+  };
+})();
+</script>
+</body>
+</html>

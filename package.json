@@ -1,0 +1,13 @@
+{
+  "name": "le-mur",
+  "version": "0.1.0",
+  "description": "Le Mur - livre d'or vivant pour soirées (photos, dessins, mots, emojis) en temps réel",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}

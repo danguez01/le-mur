@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Le Mur — projection</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%93%B8%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+<style>
+html,body{height:100%;overflow:hidden;cursor:none}
+#bg{position:fixed;inset:-5%;background-size:cover;background-position:center;filter:blur(40px) brightness(.45) saturate(1.3);transition:background-image .8s;z-index:0}
+#stage{position:fixed;inset:0;display:grid;place-items:center;z-index:1;padding:3vh 3vw 3vh 3vw}
+.slide{max-height:88vh;max-width:min(70vw,900px);animation:in .9s cubic-bezier(.2,1.2,.4,1) both;transform:rotate(var(--rot,0deg));font-size:calc(1vh + .6vw)}
+.slide.pol{padding:1.2vh 1.2vh 2vh;max-width:min(60vw,70vh);min-width:min(46vw,64vh)}
+.slide.pol img{max-height:68vh;width:auto;max-width:100%;margin:0 auto}
+.slide .cap,.slide .note{font-size:3.2vh}
+.slide .note{font-size:5vh;padding:4vh}
+.slide .who{font-size:2vh}
+@keyframes in{0%{opacity:0;transform:translateY(8vh) rotate(calc(var(--rot,0deg) - 6deg)) scale(.85)}100%{opacity:1}}
+.slide.out{animation:out .5s ease-in both}
+@keyframes out{to{opacity:0;transform:translateY(-6vh) scale(.92)}}
+#badge{position:fixed;top:3vh;left:50%;transform:translateX(-50%);background:var(--pink);padding:1vh 3vh;border-radius:99px;font-weight:800;font-size:3vh;z-index:5;animation:pulse 1s infinite alternate}
+@keyframes pulse{to{transform:translateX(-50%) scale(1.08)}}
+#qr{position:fixed;left:2.5vh;bottom:2.5vh;z-index:5;background:#fff;color:var(--ink);padding:1.4vh;border-radius:2vh;text-align:center;box-shadow:0 1vh 4vh #0008;font-weight:800;font-size:2.2vh;line-height:1.2}
+#qr img{display:block;width:20vh;height:20vh}
+#cnt{position:fixed;right:3vh;top:3vh;z-index:5;background:#0008;padding:1vh 2.4vh;border-radius:99px;font-size:2.6vh}
+#title{position:fixed;right:3vh;bottom:3vh;z-index:5;font-size:4vh;font-weight:800;text-shadow:0 .4vh 2vh #000a;max-width:40vw;text-align:right}
+.float{position:fixed;bottom:-8vh;z-index:6;font-size:7vh;animation:up 4s ease-out forwards;pointer-events:none}
+@keyframes up{to{transform:translateY(-110vh) rotate(25deg);opacity:0}}
+#none{position:fixed;inset:0;display:none;place-items:center;text-align:center;z-index:2;font-size:5vh;font-weight:800;padding:0 8vw}
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="stage"></div>
+<div id="none">Le mur t'attend…<br>Scanne le QR code et lance la soirée ! 🎉</div>
+<div id="cnt">0</div>
+<div id="qr"><img src="/qr.svg" alt="QR code"><div>Scanne<br>pour participer</div></div>
+<div id="title"></div>
+<script src="/common.js"></script>
+<script>
+(async () => {
+  const stage = document.getElementById('stage'), bg = document.getElementById('bg');
+  let cfg = { eventName: '', reactions: [] };
+  try { cfg = await Mur.config(); } catch (_) {}
+  document.getElementById('title').textContent = cfg.eventName;
+  let posts = [], idx = -1, queue = [], timer = null, showing = null;
+  const SLIDE_MS = 7000;
+
+  const render = (p, isNew) => {
+    const old = stage.firstElementChild;
+    if (old) { old.classList.add('out'); setTimeout(() => old.remove(), 450); }
+    const el = Mur.polaroid(p, { readonly: true });
+    el.classList.add('slide');
+    stage.appendChild(el);
+    bg.style.backgroundImage = p.image ? 'url("' + p.image + '")' : 'none';
+    showing = p.id;
+    const b = document.getElementById('badge'); if (b) b.remove();
+    if (isNew) { const d = document.createElement('div'); d.id = 'badge'; d.textContent = '✨ Nouveau !'; document.body.appendChild(d); setTimeout(() => d.remove(), SLIDE_MS - 500); }
+  };
+  const updateCount = () => { document.getElementById('cnt').textContent = posts.length + ' 📷'; document.getElementById('none').style.display = posts.length ? 'none' : 'grid'; };
+  const next = () => {
+    clearTimeout(timer);
+    if (!posts.length) { timer = setTimeout(next, 2000); return; }
+    let p, isNew = false;
+    if (queue.length) { const id = queue.shift(); p = posts.find((x) => x.id === id); isNew = true; }
+    if (!p) { idx = (idx + 1) % posts.length; p = posts[idx]; }
+    render(p, isNew);
+    timer = setTimeout(next, SLIDE_MS);
+  };
+  const load = async () => { try { posts = (await Mur.api('/api/posts')).sort((a, b) => a.createdAt - b.createdAt); idx = posts.length - 1; updateCount(); } catch (_) {} };
+  await load(); next();
+
+  Mur.stream({
+    post: (p) => { posts.push(p); queue.push(p.id); updateCount(); if (queue.length === 1) next(); },
+    delete: (d) => { posts = posts.filter((p) => p.id !== d.id); queue = queue.filter((i) => i !== d.id); updateCount(); if (showing === d.id) next(); },
+    react: (d) => {
+      const e = document.createElement('div'); e.className = 'float'; e.style.left = (8 + Math.random() * 84) + 'vw';
+      const last = Object.keys(d.reactions || {}); e.textContent = last.length ? last[Math.floor(Math.random() * last.length)] : '❤️';
+      document.body.appendChild(e); setTimeout(() => e.remove(), 4200);
+    },
+    open: load
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'f') document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); });
+  document.addEventListener('click', () => { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); });
+})();
+</script>
+</body>
+</html>

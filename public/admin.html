@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Le Mur — admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%93%B8%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="topbar"><b>Admin — Le Mur</b><span class="pill" id="count">…</span></div>
+<div class="wrap" style="max-width:900px">
+  <div id="login" class="card stack" hidden>
+    <input id="k" type="text" placeholder="Clé admin" autocomplete="off">
+    <button class="btn" id="ok">Entrer</button>
+  </div>
+  <div id="panel" hidden>
+    <div class="stack" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <a class="btn alt" href="/mur" target="_blank">👀 Le mur</a>
+      <a class="btn alt" href="/projection" target="_blank">📺 Projection (touche F = plein écran)</a>
+      <a class="btn alt" href="/qr.svg" target="_blank">🔳 QR code à imprimer</a>
+      <a class="btn yellow" id="zip">⬇️ Tout télécharger (zip)</a>
+    </div>
+    <p class="hint">Supprime ici ce qui ne doit pas rester. Les invités peuvent aussi supprimer leurs propres publications.</p>
+  </div>
+</div>
+<main class="grid" id="grid"></main>
+<div class="wrap" id="danger" hidden style="padding-top:0"><button class="btn small alt" id="purge" style="color:#ff8aa8">Tout effacer…</button></div>
+<script src="/common.js"></script>
+<script>
+(async () => {
+  const $ = (i) => document.getElementById(i);
+  let key = new URLSearchParams(location.search).get('key') || Mur.LS('mur_admin') || '';
+  const H = () => ({ 'x-admin-key': key });
+  const tryKey = async () => { try { await Mur.api('/api/admin/check', { headers: H() }); return true; } catch (_) { return false; } };
+  if (!(await tryKey())) {
+    $('login').hidden = false;
+    await new Promise((res) => { $('ok').onclick = async () => { key = $('k').value.trim(); if (await tryKey()) res(); else Mur.toast('Clé incorrecte'); }; });
+    $('login').hidden = true;
+  }
+  Mur.LS('mur_admin', key);
+  history.replaceState(null, '', '/admin');
+  $('panel').hidden = false; $('danger').hidden = false;
+  $('zip').href = '/admin/export.zip?key=' + encodeURIComponent(key);
+  const cfg = await Mur.config();
+  const grid = $('grid');
+  const refresh = () => { $('count').textContent = grid.children.length + ' posts'; };
+  const add = (p, top) => {
+    const el = Mur.polaroid(p, { readonly: true });
+    const d = document.createElement('button'); d.className = 'del'; d.textContent = '✕'; d.title = 'Supprimer';
+    d.onclick = async () => { if (!confirm('Supprimer cette publication ?')) return;
+      try { await Mur.api('/api/posts/' + p.id, { method: 'DELETE', headers: H() }); } catch (e) { Mur.toast(e.message); } };
+    el.appendChild(d); top ? grid.prepend(el) : grid.appendChild(el);
+  };
+  (await Mur.api('/api/posts')).sort((a, b) => b.createdAt - a.createdAt).forEach((p) => add(p));
+  refresh();
+  Mur.stream({
+    post: (p) => { add(p, true); refresh(); },
+    delete: (d) => { const el = grid.querySelector('[data-id="' + CSS.escape(d.id) + '"]'); if (el) el.remove(); refresh(); }
+  });
+  $('purge').onclick = async () => {
+    const t = prompt('Tape EFFACER pour supprimer TOUTES les publications (irréversible). Télécharge le zip avant !');
+    if (t !== 'EFFACER') return;
+    try { await Mur.api('/api/admin/purge', { method: 'POST', headers: H(), body: JSON.stringify({ confirm: 'EFFACER' }) }); Mur.toast('Mur vidé'); } catch (e) { Mur.toast(e.message); }
+  };
+})();
+</script>
+</body>
+</html>

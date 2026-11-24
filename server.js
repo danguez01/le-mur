@@ -10,6 +10,9 @@
  *   BASE_URL     URL publique, utilisée pour le QR code (ex. https://mur.exemple.com)
  *   DATA_DIR     dossier des données (défaut ./data)
  *   PURGE_DAYS   suppression automatique après N jours (défaut 30, 0 = jamais)
+ *   EVENT_CODE   code de soirée (24+ caractères aléatoires). S'il est défini, rien n'est
+ *                visible sans lui : il est caché dans le QR code (/?c=<code>).
+ *   ALLOW_OPEN   =1 pour autoriser un mur public (sans code) avec une BASE_URL https.
  */
 const express = require('express');
 const fs = require('fs');
@@ -25,6 +28,13 @@ const UPLOADS = path.join(DATA_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'posts.json');
 const PURGE_DAYS = parseInt(process.env.PURGE_DAYS || '30', 10);
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
+const EVENT_CODE = process.env.EVENT_CODE || '';
+// Mode "en ligne" (BASE_URL https) : refus de démarrer sans clé admin ni code de soirée.
+if (/^https:\/\//.test(BASE_URL) && process.env.ALLOW_OPEN !== '1') {
+  if (!EVENT_CODE) { console.error('[le-mur] EVENT_CODE manquant : refus de démarrer (ALLOW_OPEN=1 pour un mur public).'); process.exit(1); }
+  if (!process.env.ADMIN_KEY) { console.error('[le-mur] ADMIN_KEY manquante : refus de démarrer.'); process.exit(1); }
+}
+if (EVENT_CODE && EVENT_CODE.length < 16) { console.error('[le-mur] EVENT_CODE trop court (16 caractères minimum).'); process.exit(1); }
 let ADMIN_KEY = process.env.ADMIN_KEY || '';
 if (!ADMIN_KEY) {
   ADMIN_KEY = crypto.randomBytes(6).toString('hex');
@@ -119,6 +129,38 @@ const isAdmin = (req) => {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
 
+/* ---------- Code de soirée ---------- */
+const GATE_TOKEN = EVENT_CODE ? crypto.createHmac('sha256', EVENT_CODE).update('le-mur-gate').digest('hex') : '';
+const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const cookieOf = (req, name) => {
+  const c = String(req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith(name + '='));
+  return c ? decodeURIComponent(c.slice(name.length + 1)) : '';
+};
+const hasAccess = (req) => !EVENT_CODE || safeEq(cookieOf(req, 'mur_code'), GATE_TOKEN);
+const grant = (req, res) => { if (EVENT_CODE) res.append('Set-Cookie', 'mur_code=' + GATE_TOKEN + '; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax' + (req.secure ? '; Secure' : '')); };
+const GATE_HTML = '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Soirée privée</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#15101f;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px"><div><div style="font-size:56px">🔒</div><h1 style="font-size:24px">Soirée privée</h1><p style="color:#b9aed2;max-width:320px;margin:8px auto 0">Scanne le QR code affiché sur place pour participer.</p></div></body></html>';
+const GATE_PAGES = new Set(['/', '/index.html', '/mur', '/mur.html', '/projection', '/projection.html']);
+const codeLimiter = limiter(30, 60000);
+app.use((req, res, next) => {
+  if (!EVENT_CODE) return next();
+  if (req.method === 'GET' && req.query.c !== undefined) {
+    return codeLimiter(req, res, () => {
+      if (safeEq(req.query.c, EVENT_CODE)) {
+        grant(req, res);
+        const u = new URL(req.originalUrl, 'http://x'); u.searchParams.delete('c');
+        return res.redirect(302, u.pathname + u.search);
+      }
+      res.status(403).type('html').send(GATE_HTML);
+    });
+  }
+  const p = req.path;
+  const protectedPath = GATE_PAGES.has(p) || p.startsWith('/uploads/') || (p.startsWith('/api/') && !p.startsWith('/api/admin/') && p !== '/api/config');
+  if (!protectedPath || hasAccess(req) || isAdmin(req)) return next();
+  res.set('Cache-Control', 'no-store');
+  if (p.startsWith('/api/') || p.startsWith('/uploads/')) return res.status(401).json({ error: 'Code de soirée requis.' });
+  res.status(403).type('html').send(GATE_HTML);
+});
+
 app.get('/api/config', (req, res) => res.json({ eventName: EVENT_NAME, reactions: REACTIONS, purgeDays: PURGE_DAYS }));
 
 app.get('/api/posts', (req, res) => {
@@ -188,7 +230,16 @@ app.delete('/api/posts/:id', limiter(30, 60000), (req, res) => {
 });
 
 /* ---------- Admin ---------- */
-app.get('/api/admin/check', (req, res) => res.status(isAdmin(req) ? 200 : 403).json({ ok: isAdmin(req), count: posts.length }));
+app.get('/api/admin/check', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ ok: false });
+  grant(req, res); // l'admin voit le mur dans son navigateur sans scanner
+  res.json({ ok: true, count: posts.length });
+});
+const inviteUrl = (req) => (BASE_URL || (req.protocol + '://' + req.get('host'))) + '/' + (EVENT_CODE ? '?c=' + encodeURIComponent(EVENT_CODE) : '');
+app.get('/api/admin/link', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Interdit.' });
+  res.set('Cache-Control', 'no-store').json({ url: inviteUrl(req), protected: !!EVENT_CODE });
+});
 
 app.get('/admin/export.zip', (req, res) => {
   if (!isAdmin(req)) return res.status(403).send('Interdit');
@@ -210,17 +261,17 @@ app.post('/api/admin/purge', (req, res) => {
 
 /* ---------- QR code ---------- */
 app.get('/qr.svg', async (req, res) => {
-  const base = BASE_URL || (req.protocol + '://' + req.get('host'));
+  if (!isAdmin(req)) return res.status(403).send('Interdit'); // le QR contient le code de soirée
   try {
-    const svg = await QRCode.toString(base + '/', { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
-    res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=300' }).send(svg);
+    const svg = await QRCode.toString(inviteUrl(req), { type: 'svg', margin: 1, errorCorrectionLevel: 'M' });
+    res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' }).send(svg);
   } catch (e) { res.status(500).end(); }
 });
 
 /* ---------- Fichiers ---------- */
 app.use('/uploads', express.static(UPLOADS, { maxAge: '7d', immutable: true, index: false, dotfiles: 'deny' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: '5m' }));
-app.get('/healthz', (req, res) => res.json({ ok: true, posts: posts.length }));
+app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 /* ---------- Purge automatique ---------- */
 function autoPurge() {
@@ -231,4 +282,4 @@ function autoPurge() {
 autoPurge();
 setInterval(autoPurge, 3600000);
 
-app.listen(PORT, () => console.log('[le-mur] http://localhost:' + PORT + '  (' + EVENT_NAME + ', ' + posts.length + ' posts)'));
+app.listen(PORT, () => console.log('[le-mur] http://localhost:' + PORT + '  (' + EVENT_NAME + ', ' + posts.length + ' posts, code de soirée ' + (EVENT_CODE ? 'ACTIF' : 'ABSENT : mur public') + ')'));

@@ -35,7 +35,7 @@ html,body{height:100%;overflow:hidden;cursor:none}
 <div id="stage"></div>
 <div id="none">Le mur t'attend…<br>Scanne le QR code et lance la soirée ! 🎉</div>
 <div id="cnt">0</div>
-<div id="qr"><img src="/qr.svg" alt="QR code"><div>Scanne<br>pour participer</div></div>
+<div id="qr" hidden><img id="qrimg" alt="QR code"><div>Scanne<br>pour participer</div></div>
 <div id="title"></div>
 <script src="/common.js"></script>
 <script>
@@ -44,6 +44,9 @@ html,body{height:100%;overflow:hidden;cursor:none}
   let cfg = { eventName: '', reactions: [] };
   try { cfg = await Mur.config(); } catch (_) {}
   document.getElementById('title').textContent = cfg.eventName;
+  // Le QR contient le code de soirée : il n'est affiché que depuis un navigateur où l'admin s'est connecté.
+  try { const k = Mur.LS('mur_admin'); if (k) { const r = await fetch('/qr.svg', { headers: { 'x-admin-key': k } });
+    if (r.ok) { document.getElementById('qrimg').src = URL.createObjectURL(await r.blob()); document.getElementById('qr').hidden = false; } } } catch (_) {}
   let posts = [], idx = -1, queue = [], timer = null, showing = null;
   const SLIDE_MS = 7000;
 

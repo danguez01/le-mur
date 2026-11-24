@@ -12,7 +12,7 @@ et sur un écran de projection. Aucune application à installer, aucun compte.
 | `/mur` | Le mur en direct (réactions, suppression de ses propres posts) |
 | `/projection` | Mode TV plein écran (clic ou touche F), QR code intégré |
 | `/admin` | Modération, export zip, QR à imprimer (clé `ADMIN_KEY`) |
-| `/qr.svg` | QR code vers `BASE_URL` |
+| `/qr.svg` | QR code d'invitation (contient le code de soirée) — réservé à l'admin |
 | `/healthz` | Test de santé |
 
 ## Lancer
@@ -23,8 +23,12 @@ PORT=3100 ADMIN_KEY=<clé longue> EVENT_NAME="Anniv de Dan" \
 BASE_URL=https://mur.exemple.com PURGE_DAYS=30 node server.js
 ```
 
-Variables : `PORT` (3100), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `BASE_URL`
-(pour le QR), `DATA_DIR` (./data), `PURGE_DAYS` (30, 0 = jamais).
+Variables : `PORT` (3100), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `EVENT_CODE`
+(code de soirée, 16 caractères minimum, obligatoire en prod), `BASE_URL` (pour le QR),
+`DATA_DIR` (./data), `PURGE_DAYS` (30, 0 = jamais).
+
+Si `BASE_URL` est en https et que `EVENT_CODE` ou `ADMIN_KEY` manque, le service refuse de
+démarrer (`ALLOW_OPEN=1` pour un mur public volontaire).
 
 Les données (photos + `posts.json`) sont dans `DATA_DIR`, hors Git. À sauvegarder.
 
@@ -52,6 +56,13 @@ Restart=always
 WantedBy=multi-user.target
 ```
 (`/etc/le-mur.env` contient `ADMIN_KEY=...`, droits 600.)
+
+## Code de soirée
+
+`EVENT_CODE` est caché dans le QR code (`/?c=<code>`). Au scan, le serveur pose un cookie
+`HttpOnly` (7 jours) et retire le code de l'adresse. Sans ce cookie : les pages, l'API, le temps
+réel et les photos répondent 403/401 ("Soirée privée"). L'admin (`ADMIN_KEY`) accède à tout, et
+récupère le QR et le lien d'invitation depuis `/admin`. Le code n'apparaît dans aucune page publique.
 
 ## Données personnelles
 

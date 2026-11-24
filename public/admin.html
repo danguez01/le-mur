@@ -19,9 +19,12 @@
     <div class="stack" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
       <a class="btn alt" href="/mur" target="_blank">👀 Le mur</a>
       <a class="btn alt" href="/projection" target="_blank">📺 Projection (touche F = plein écran)</a>
-      <a class="btn alt" href="/qr.svg" target="_blank">🔳 QR code à imprimer</a>
+      <a class="btn alt" id="qrlink" target="_blank">🔳 QR code à imprimer</a>
       <a class="btn yellow" id="zip">⬇️ Tout télécharger (zip)</a>
     </div>
+    <div class="card stack" style="margin-top:12px"><b>Lien d'invitation (contient le code de soirée)</b>
+      <input id="invite" type="text" readonly><button class="btn small alt" id="copy">Copier le lien</button>
+      <p class="hint" style="margin:0">Ne le publie pas : toute personne qui l'a peut voir et poster. Sans ce code, le mur est invisible.</p></div>
     <p class="hint">Supprime ici ce qui ne doit pas rester. Les invités peuvent aussi supprimer leurs propres publications.</p>
   </div>
 </div>
@@ -43,6 +46,9 @@
   history.replaceState(null, '', '/admin');
   $('panel').hidden = false; $('danger').hidden = false;
   $('zip').href = '/admin/export.zip?key=' + encodeURIComponent(key);
+  $('qrlink').href = '/qr.svg?key=' + encodeURIComponent(key);
+  try { const l = await Mur.api('/api/admin/link', { headers: H() }); $('invite').value = l.url; } catch (_) {}
+  $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('invite').value); Mur.toast('Lien copié ✔'); } catch (_) { $('invite').select(); Mur.toast('Sélectionné : copie-le à la main'); } };
   const cfg = await Mur.config();
   const grid = $('grid');
   const refresh = () => { $('count').textContent = grid.children.length + ' posts'; };

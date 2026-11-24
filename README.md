@@ -23,7 +23,7 @@ PORT=3100 ADMIN_KEY=<clé longue> EVENT_NAME="Anniv de Dan" \
 BASE_URL=https://mur.exemple.com PURGE_DAYS=30 node server.js
 ```
 
-Variables : `PORT` (3100), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `EVENT_CODE`
+Variables : `PORT` (3100), `HOST` (127.0.0.1 : le service n'écoute qu'en local, derrière le reverse proxy), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `EVENT_CODE`
 (code de soirée, 16 caractères minimum, obligatoire en prod), `BASE_URL` (pour le QR),
 `DATA_DIR` (./data), `PURGE_DAYS` (30, 0 = jamais).
 

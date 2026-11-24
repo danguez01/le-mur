@@ -12,6 +12,7 @@
  *   PURGE_DAYS   suppression automatique après N jours (défaut 30, 0 = jamais)
  *   EVENT_CODE   code de soirée (24+ caractères aléatoires). S'il est défini, rien n'est
  *                visible sans lui : il est caché dans le QR code (/?c=<code>).
+ *   HOST         interface d'écoute (défaut 127.0.0.1 : seul le reverse proxy y accède)
  *   ALLOW_OPEN   =1 pour autoriser un mur public (sans code) avec une BASE_URL https.
  */
 const express = require('express');
@@ -139,7 +140,17 @@ const cookieOf = (req, name) => {
 const hasAccess = (req) => !EVENT_CODE || safeEq(cookieOf(req, 'mur_code'), GATE_TOKEN);
 const grant = (req, res) => { if (EVENT_CODE) res.append('Set-Cookie', 'mur_code=' + GATE_TOKEN + '; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax' + (req.secure ? '; Secure' : '')); };
 const GATE_HTML = '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Soirée privée</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#15101f;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px"><div><div style="font-size:56px">🔒</div><h1 style="font-size:24px">Soirée privée</h1><p style="color:#b9aed2;max-width:320px;margin:8px auto 0">Scanne le QR code affiché sur place pour participer.</p></div></body></html>';
-const GATE_PAGES = new Set(['/', '/index.html', '/mur', '/mur.html', '/projection', '/projection.html']);
+// Liste blanche : tout est protégé SAUF ce qui est explicitement public. La garde compare une forme
+// normalisée (décodée, en minuscules, sans // ni /../ ni / final) : Express ignore la casse (/API),
+// express.static décode l'adresse (/%6Dur) et accepte les // (//mur).
+const PUBLIC_EXACT = new Set(['/api/config', '/healthz', '/admin', '/admin.html', '/admin/export.zip', '/style.css', '/common.js']);
+const normPath = (raw) => {
+  let p = decodeURIComponent(raw).toLowerCase().replace(/\\/g, '/');
+  p = path.posix.normalize('/' + p);
+  return p.length > 1 ? p.replace(/\/+$/, '') : p;
+};
+// /api/admin/* et /admin/export.zip vérifient eux-mêmes la clé admin dans leur route.
+const isPublicPath = (p) => PUBLIC_EXACT.has(p) || p.startsWith('/api/admin/');
 const codeLimiter = limiter(30, 60000);
 app.use((req, res, next) => {
   if (!EVENT_CODE) return next();
@@ -153,9 +164,9 @@ app.use((req, res, next) => {
       res.status(403).type('html').send(GATE_HTML);
     });
   }
-  const p = req.path;
-  const protectedPath = GATE_PAGES.has(p) || p.startsWith('/uploads/') || (p.startsWith('/api/') && !p.startsWith('/api/admin/') && p !== '/api/config');
-  if (!protectedPath || hasAccess(req) || isAdmin(req)) return next();
+  let p;
+  try { p = normPath(req.path); } catch (_) { return res.status(400).end(); }
+  if (isPublicPath(p) || hasAccess(req) || isAdmin(req)) return next();
   res.set('Cache-Control', 'no-store');
   if (p.startsWith('/api/') || p.startsWith('/uploads/')) return res.status(401).json({ error: 'Code de soirée requis.' });
   res.status(403).type('html').send(GATE_HTML);
@@ -282,4 +293,5 @@ function autoPurge() {
 autoPurge();
 setInterval(autoPurge, 3600000);
 
-app.listen(PORT, () => console.log('[le-mur] http://localhost:' + PORT + '  (' + EVENT_NAME + ', ' + posts.length + ' posts, code de soirée ' + (EVENT_CODE ? 'ACTIF' : 'ABSENT : mur public') + ')'));
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => console.log('[le-mur] http://' + HOST + ':' + PORT + '  (' + EVENT_NAME + ', ' + posts.length + ' posts, code de soirée ' + (EVENT_CODE ? 'ACTIF' : 'ABSENT : mur public') + ')'));

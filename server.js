@@ -10,6 +10,8 @@
  *   BASE_URL     URL publique, utilisée pour le QR code (ex. https://mur.exemple.com)
  *   DATA_DIR     dossier des données (défaut ./data)
  *   PURGE_DAYS   suppression automatique après N jours (défaut 30, 0 = jamais)
+ *   EVENT_GENDER pour qui est la soirée : m (un homme), f (une femme), p (plusieurs personnes). Défaut m.
+ *                Les textes qui parlent de la ou des personnes fêtées s'accordent avec ce réglage.
  *   EVENT_CODE   code de soirée (24+ caractères aléatoires). S'il est défini, rien n'est
  *                visible sans lui : il est caché dans le QR code (/?c=<code>).
  *   HOST         interface d'écoute (défaut 127.0.0.1 : seul le reverse proxy y accède)
@@ -30,6 +32,8 @@ const DB_FILE = path.join(DATA_DIR, 'posts.json');
 const PURGE_DAYS = parseInt(process.env.PURGE_DAYS || '30', 10);
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
 const EVENT_CODE = process.env.EVENT_CODE || '';
+const EVENT_GENDER = ['m', 'f', 'p'].includes(process.env.EVENT_GENDER) ? process.env.EVENT_GENDER : 'm';
+if (process.env.EVENT_GENDER && process.env.EVENT_GENDER !== EVENT_GENDER) console.warn('[le-mur] EVENT_GENDER invalide (m, f ou p attendu) : "m" utilisé.');
 // Mode "en ligne" (BASE_URL https) : refus de démarrer sans clé admin ni code de soirée.
 if (/^https:\/\//.test(BASE_URL) && process.env.ALLOW_OPEN !== '1') {
   if (!EVENT_CODE) { console.error('[le-mur] EVENT_CODE manquant : refus de démarrer (ALLOW_OPEN=1 pour un mur public).'); process.exit(1); }
@@ -172,7 +176,7 @@ app.use((req, res, next) => {
   res.status(403).type('html').send(GATE_HTML);
 });
 
-app.get('/api/config', (req, res) => res.json({ eventName: EVENT_NAME, reactions: REACTIONS, purgeDays: PURGE_DAYS }));
+app.get('/api/config', (req, res) => res.json({ eventName: EVENT_NAME, eventGender: EVENT_GENDER, reactions: REACTIONS, purgeDays: PURGE_DAYS }));
 
 app.get('/api/posts', (req, res) => {
   res.set('Cache-Control', 'no-store');

@@ -23,7 +23,7 @@ PORT=3100 ADMIN_KEY=<clé longue> EVENT_NAME="Anniv de Dan" \
 BASE_URL=https://mur.exemple.com PURGE_DAYS=30 node server.js
 ```
 
-Variables : `PORT` (3100), `HOST` (127.0.0.1 : le service n'écoute qu'en local, derrière le reverse proxy), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `EVENT_CODE`
+Variables : `EVENT_GENDER` (`m` un homme, `f` une femme, `p` plusieurs personnes ; défaut `m` ; accorde les textes qui parlent de la ou des personnes fêtées), `PORT` (3100), `HOST` (127.0.0.1 : le service n'écoute qu'en local, derrière le reverse proxy), `EVENT_NAME`, `ADMIN_KEY` (obligatoire en prod), `EVENT_CODE`
 (code de soirée, 16 caractères minimum, obligatoire en prod), `BASE_URL` (pour le QR),
 `DATA_DIR` (./data), `PURGE_DAYS` (30, 0 = jamais).
 
@@ -56,6 +56,12 @@ Restart=always
 WantedBy=multi-user.target
 ```
 (`/etc/le-mur.env` contient `ADMIN_KEY=...`, droits 600.)
+
+## Règle d'écriture
+
+Jamais d'écriture inclusive : aucun point médian, aucune parenthèse ni barre de genre (`·`, `(e)`, `/e`),
+dans les textes actuels comme futurs. Les textes sur la ou les personnes fêtées s'accordent avec
+`EVENT_GENDER` ; ceux qui s'adressent à l'invité (genre inconnu) gardent le masculin générique.
 
 ## Code de soirée
 

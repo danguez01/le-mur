@@ -80,21 +80,25 @@ const Mur = (() => {
     return es;
   };
 
-  const DEFIS = [
+  // Pour qui est la soirée (réglage EVENT_GENDER du serveur) : m, f ou p. Pas d'écriture inclusive.
+  let gender = 'm';
+  const setGender = (g) => { if (g === 'm' || g === 'f' || g === 'p') gender = g; };
+  const hero = () => ({ m: 'le héros', f: "l'héroïne", p: 'les héros' }[gender]) + ' de la soirée';
+  const defis = () => [
     "Selfie avec la personne que tu connais le moins ici",
     "Dessine le DJ (ou la playlist) 🎧",
     "Photo de groupe : tout le monde fait la même grimace",
-    "Écris un souhait pour le·la héros·ïne de la soirée",
+    'Écris un souhait pour ' + hero(),
     "Selfie avec la personne la plus grande de la salle",
     "Reproduis un tableau célèbre à plusieurs",
-    "Dessine-toi en super-héros ou super-héroïne 🦸",
+    "Dessine-toi en superhéros 🦸",
     "Photo de ta main qui tient quelque chose de ridicule",
     "Écris le souvenir le plus fou lié à cette soirée",
     "Selfie « on se connaît depuis toujours » avec un inconnu",
     "Dessine ton animal totem et colle-lui un chapeau",
     "Photo des pieds de tout le monde en cercle 🦶"
   ];
-  const defi = (skip) => { let d; do { d = DEFIS[Math.floor(Math.random() * DEFIS.length)]; } while (d === skip && DEFIS.length > 1); return d; };
+  const defi = (skip) => { const L = defis(); let d; do { d = L[Math.floor(Math.random() * L.length)]; } while (d === skip && L.length > 1); return d; };
 
-  return { LS, owner, mine, addMine, delMine, api, config, toast, ago, polaroid, renderReactions, markReacted, stream, defi };
+  return { LS, owner, mine, addMine, delMine, api, config, toast, ago, polaroid, renderReactions, markReacted, stream, defi, setGender };
 })();

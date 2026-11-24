@@ -77,7 +77,7 @@
   const show = (id) => ['s-welcome', 's-home', 's-edit'].forEach((s) => { $(s).hidden = s !== id; window.scrollTo(0, 0); });
 
   let cfg = { eventName: 'La soirée', purgeDays: 30 };
-  try { cfg = await Mur.config(); } catch (_) {}
+  try { cfg = await Mur.config(); Mur.setGender(cfg.eventGender); } catch (_) {}
   document.title = cfg.eventName + ' — Le Mur';
   $('evt').textContent = cfg.eventName; $('evt2').textContent = cfg.eventName;
   $('purge').textContent = cfg.purgeDays || 30;

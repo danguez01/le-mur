@@ -25,6 +25,15 @@
     <div class="card stack" style="margin-top:12px"><b>Lien d'invitation (contient le code de soirée)</b>
       <input id="invite" type="text" readonly><button class="btn small alt" id="copy">Copier le lien</button>
       <p class="hint" style="margin:0">Ne le publie pas : toute personne qui l'a peut voir et poster. Sans ce code, le mur est invisible.</p></div>
+    <div class="card stack" style="margin-top:12px" id="logoCard"><b>Logo de l'événement</b>
+      <div id="logoPrev" style="min-height:84px;border-radius:12px;display:grid;place-items:center;padding:8px;background:repeating-conic-gradient(#2a2238 0 25%,#1f1830 0 50%) 0 0/20px 20px"><span class="hint" id="logoNone" style="margin:0">Aucun logo pour le moment</span></div>
+      <input id="logoFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+        <button class="btn small alt" id="logoPick">🖼️ Choisir une image</button>
+        <button class="btn small" id="logoSave" disabled>Enregistrer</button>
+        <button class="btn small alt" id="logoDel" style="color:#ff8aa8" disabled>Retirer le logo</button>
+      </div>
+      <p class="hint" style="margin:0">PNG, JPEG ou WebP (pas de SVG), 1 Mo au plus. L'image est réduite à 512 px de côté au maximum, la transparence des PNG est conservée.</p></div>
     <p class="hint">Supprime ici ce qui ne doit pas rester. Les invités peuvent aussi supprimer leurs propres publications.</p>
   </div>
 </div>
@@ -49,7 +58,49 @@
   $('qrlink').href = '/qr.svg?key=' + encodeURIComponent(key);
   try { const l = await Mur.api('/api/admin/link', { headers: H() }); $('invite').value = l.url; } catch (_) {}
   $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('invite').value); Mur.toast('Lien copié ✔'); } catch (_) { $('invite').select(); Mur.toast('Sélectionné : copie-le à la main'); } };
-  const cfg = await Mur.config();
+  let cfg = await Mur.config();
+  /* ----- Logo ----- */
+  let pending = null; // data URL prête à envoyer
+  const showPrev = (url) => {
+    const box = $('logoPrev'); box.querySelectorAll('img').forEach((i) => i.remove());
+    $('logoNone').hidden = !!url;
+    if (url) { const i = new Image(); i.alt = 'Logo'; i.style.cssText = 'max-height:80px;max-width:100%;object-fit:contain'; i.src = url; box.appendChild(i); }
+  };
+  const syncLogo = () => { showPrev(cfg.logo); $('logoDel').disabled = !cfg.logo; $('logoSave').disabled = !pending; };
+  syncLogo();
+  const MAX_SIDE = 512, MAX_BYTES = 1024 * 1024;
+  const prepare = async (file) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('Format refusé : PNG, JPEG ou WebP uniquement (pas de SVG).');
+    if (file.size > 10 * 1024 * 1024) throw new Error('Fichier trop lourd (10 Mo maximum avant réduction).');
+    let src;
+    try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) { throw new Error("Impossible de lire cette image."); }
+    const jpeg = file.type === 'image/jpeg';
+    for (const side of [MAX_SIDE, 384, 256]) {
+      const k = Math.min(1, side / Math.max(src.width, src.height));
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(src.width * k)); c.height = Math.max(1, Math.round(src.height * k));
+      const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, c.width, c.height);
+      const url = jpeg ? c.toDataURL('image/jpeg', 0.9) : c.toDataURL('image/png'); // le PNG garde la transparence
+      if ((url.length - url.indexOf(',') - 1) * 0.75 <= MAX_BYTES) return url;
+    }
+    throw new Error('Image trop lourde même après réduction. Essaie une image plus simple.');
+  };
+  $('logoPick').onclick = () => $('logoFile').click();
+  $('logoFile').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { pending = await prepare(f); showPrev(pending); $('logoSave').disabled = false; }
+    catch (err) { pending = null; Mur.toast(err.message, 4000); syncLogo(); }
+  };
+  $('logoSave').onclick = async () => {
+    if (!pending) return; $('logoSave').disabled = true;
+    try { const r = await Mur.api('/api/admin/logo', { method: 'POST', headers: H(), body: JSON.stringify({ image: pending }) });
+      cfg.logo = r.logo; pending = null; syncLogo(); Mur.toast('Logo enregistré ✔'); }
+    catch (err) { Mur.toast(err.message, 4000); $('logoSave').disabled = false; }
+  };
+  $('logoDel').onclick = async () => {
+    if (!confirm('Retirer le logo de l\'événement ?')) return;
+    try { await Mur.api('/api/admin/logo', { method: 'DELETE', headers: H() }); cfg.logo = null; pending = null; syncLogo(); Mur.toast('Logo retiré ✔'); }
+    catch (err) { Mur.toast(err.message, 4000); }
+  };
   const grid = $('grid');
   const refresh = () => { $('count').textContent = grid.children.length + ' posts'; };
   const add = (p, top) => {

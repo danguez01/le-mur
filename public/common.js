@@ -20,6 +20,18 @@ const Mur = (() => {
     document.body.appendChild(t); setTimeout(() => t.remove(), ms);
   };
 
+  /* Nom de l'événement, précédé du logo s'il y en a un. Sans logo : texte seul, comme avant. */
+  const brand = (el, cfg, scale) => {
+    el.textContent = '';
+    if (cfg.logo) {
+      const img = new Image(); img.className = 'brandlogo'; img.alt = ''; img.src = cfg.logo;
+      if (scale) img.style.height = scale + 'em';
+      img.onerror = () => { img.remove(); el.classList.remove('brand'); };
+      el.classList.add('brand'); el.appendChild(img);
+    }
+    el.appendChild(document.createTextNode(cfg.eventName));
+  };
+
   const hash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; };
   const ago = (t) => {
     const s = Math.max(0, (Date.now() - t) / 1000);
@@ -100,5 +112,5 @@ const Mur = (() => {
   ];
   const defi = (skip) => { const L = defis(); let d; do { d = L[Math.floor(Math.random() * L.length)]; } while (d === skip && L.length > 1); return d; };
 
-  return { LS, owner, mine, addMine, delMine, api, config, toast, ago, polaroid, renderReactions, markReacted, stream, defi, setGender };
+  return { LS, owner, mine, addMine, delMine, api, config, toast, ago, polaroid, renderReactions, markReacted, stream, defi, setGender, brand };
 })();

@@ -51,6 +51,25 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 fs.mkdirSync(UPLOADS, { recursive: true });
 
+/* ---------- Logo de l'événement : un seul fichier DATA_DIR/logo.<ext> ---------- */
+const LOGO_MAX = 1024 * 1024; // 1 Mo
+const LOGO_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }; // pas de SVG : il peut contenir du code
+const logoFile = () => {
+  for (const ext of Object.keys(LOGO_TYPES)) {
+    const file = path.join(DATA_DIR, 'logo.' + ext);
+    try { return { file, ext, mtime: fs.statSync(file).mtimeMs }; } catch (_) {}
+  }
+  return null;
+};
+const removeLogos = () => { for (const ext of Object.keys(LOGO_TYPES)) { try { fs.unlinkSync(path.join(DATA_DIR, 'logo.' + ext)); } catch (_) {} } };
+// Type réel d'après le contenu du fichier, jamais d'après ce que le client annonce.
+const logoSniff = (b) => {
+  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
+  if (b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  return null;
+};
+
 /* ---------- Stockage ---------- */
 let posts = [];
 try {
@@ -143,11 +162,13 @@ const cookieOf = (req, name) => {
 };
 const hasAccess = (req) => !EVENT_CODE || safeEq(cookieOf(req, 'mur_code'), GATE_TOKEN);
 const grant = (req, res) => { if (EVENT_CODE) res.append('Set-Cookie', 'mur_code=' + GATE_TOKEN + '; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax' + (req.secure ? '; Secure' : '')); };
-const GATE_HTML = '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Soirée privée</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#15101f;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px"><div><div style="font-size:56px">🔒</div><h1 style="font-size:24px">Soirée privée</h1><p style="color:#b9aed2;max-width:320px;margin:8px auto 0">Scanne le QR code affiché sur place pour participer.</p></div></body></html>';
+const gateHtml = () => GATE_HTML_A + (logoFile() ? '<img src="/logo" alt="" onerror="this.remove()" style="display:block;margin:0 auto 14px;height:72px;max-width:60vw;object-fit:contain">' : '') + GATE_HTML_B;
+const GATE_HTML_A = '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Soirée privée</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#15101f;color:#fff;font-family:system-ui,sans-serif;text-align:center;padding:24px"><div>';
+const GATE_HTML_B = '<div style="font-size:56px">🔒</div><h1 style="font-size:24px">Soirée privée</h1><p style="color:#b9aed2;max-width:320px;margin:8px auto 0">Scanne le QR code affiché sur place pour participer.</p></div></body></html>';
 // Liste blanche : tout est protégé SAUF ce qui est explicitement public. La garde compare une forme
 // normalisée (décodée, en minuscules, sans // ni /../ ni / final) : Express ignore la casse (/API),
 // express.static décode l'adresse (/%6Dur) et accepte les // (//mur).
-const PUBLIC_EXACT = new Set(['/api/config', '/healthz', '/admin', '/admin.html', '/admin/export.zip', '/style.css', '/common.js']);
+const PUBLIC_EXACT = new Set(['/api/config', '/healthz', '/admin', '/admin.html', '/admin/export.zip', '/style.css', '/common.js', '/logo']);
 const normPath = (raw) => {
   let p = decodeURIComponent(raw).toLowerCase().replace(/\\/g, '/');
   p = path.posix.normalize('/' + p);
@@ -165,7 +186,7 @@ app.use((req, res, next) => {
         const u = new URL(req.originalUrl, 'http://x'); u.searchParams.delete('c');
         return res.redirect(302, u.pathname + u.search);
       }
-      res.status(403).type('html').send(GATE_HTML);
+      res.status(403).type('html').send(gateHtml());
     });
   }
   let p;
@@ -173,10 +194,13 @@ app.use((req, res, next) => {
   if (isPublicPath(p) || hasAccess(req) || isAdmin(req)) return next();
   res.set('Cache-Control', 'no-store');
   if (p.startsWith('/api/') || p.startsWith('/uploads/')) return res.status(401).json({ error: 'Code de soirée requis.' });
-  res.status(403).type('html').send(GATE_HTML);
+  res.status(403).type('html').send(gateHtml());
 });
 
-app.get('/api/config', (req, res) => res.json({ eventName: EVENT_NAME, eventGender: EVENT_GENDER, reactions: REACTIONS, purgeDays: PURGE_DAYS }));
+app.get('/api/config', (req, res) => {
+  const l = logoFile();
+  res.set('Cache-Control', 'no-store').json({ eventName: EVENT_NAME, eventGender: EVENT_GENDER, reactions: REACTIONS, purgeDays: PURGE_DAYS, logo: l ? '/logo?v=' + Math.round(l.mtime) : null });
+});
 
 app.get('/api/posts', (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -271,6 +295,36 @@ app.post('/api/admin/purge', (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Interdit.' });
   if ((req.body || {}).confirm !== 'EFFACER') return res.status(400).json({ error: 'Confirmation manquante.' });
   for (const p of [...posts]) removePost(p.id);
+  res.json({ ok: true });
+});
+
+/* ---------- Logo ---------- */
+app.get('/logo', (req, res) => { // public : le logo n'est pas sensible
+  const l = logoFile();
+  if (!l) return res.status(404).end();
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(l.file);
+});
+app.post('/api/admin/logo', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Interdit.' });
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String((req.body || {}).image || ''));
+  if (!m) return res.status(400).json({ error: 'Format refusé : PNG, JPEG ou WebP uniquement.' });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > LOGO_MAX) return res.status(413).json({ error: 'Logo trop lourd : 1 Mo maximum.' });
+  const kind = logoSniff(buf);
+  if (!kind || kind !== (m[1] === 'jpeg' ? 'jpg' : m[1])) return res.status(400).json({ error: 'Le contenu du fichier n\'est pas un PNG, un JPEG ou un WebP valide.' });
+  const tmp = path.join(DATA_DIR, 'logo.tmp');
+  try {
+    fs.writeFileSync(tmp, buf);
+    removeLogos();
+    fs.renameSync(tmp, path.join(DATA_DIR, 'logo.' + kind));
+  } catch (e) { try { fs.unlinkSync(tmp); } catch (_) {} return res.status(500).json({ error: 'Écriture impossible.' }); }
+  const l = logoFile();
+  res.json({ ok: true, logo: '/logo?v=' + Math.round(l.mtime) });
+});
+app.delete('/api/admin/logo', (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Interdit.' });
+  removeLogos();
   res.json({ ok: true });
 });
 

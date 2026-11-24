@@ -24,7 +24,9 @@ html,body{height:100%;overflow:hidden;cursor:none}
 #qr{position:fixed;left:2.5vh;bottom:2.5vh;z-index:5;background:#fff;color:var(--ink);padding:1.4vh;border-radius:2vh;text-align:center;box-shadow:0 1vh 4vh #0008;font-weight:800;font-size:2.2vh;line-height:1.2}
 #qr img{display:block;width:20vh;height:20vh}
 #cnt{position:fixed;right:3vh;top:3vh;z-index:5;background:#0008;padding:1vh 2.4vh;border-radius:99px;font-size:2.6vh}
-#title{position:fixed;right:3vh;bottom:3vh;z-index:5;font-size:4vh;font-weight:800;text-shadow:0 .4vh 2vh #000a;max-width:40vw;text-align:right}
+#title{position:fixed;right:3vh;bottom:3vh;z-index:5;font-size:4vh;font-weight:800;text-shadow:0 .4vh 2vh #000a;max-width:50vw;text-align:right}
+#title.brand{justify-content:flex-end}
+#title .brandlogo{filter:drop-shadow(0 .4vh 1.2vh #000a)}
 .float{position:fixed;bottom:-8vh;z-index:6;font-size:7vh;animation:up 4s ease-out forwards;pointer-events:none}
 @keyframes up{to{transform:translateY(-110vh) rotate(25deg);opacity:0}}
 #none{position:fixed;inset:0;display:none;place-items:center;text-align:center;z-index:2;font-size:5vh;font-weight:800;padding:0 8vw}
@@ -43,7 +45,7 @@ html,body{height:100%;overflow:hidden;cursor:none}
   const stage = document.getElementById('stage'), bg = document.getElementById('bg');
   let cfg = { eventName: '', reactions: [] };
   try { cfg = await Mur.config(); } catch (_) {}
-  document.getElementById('title').textContent = cfg.eventName;
+  Mur.brand(document.getElementById('title'), cfg, 1.8);
   // Le QR contient le code de soirée : il n'est affiché que depuis un navigateur où l'admin s'est connecté.
   try { const k = Mur.LS('mur_admin'); if (k) { const r = await fetch('/qr.svg', { headers: { 'x-admin-key': k } });
     if (r.ok) { document.getElementById('qrimg').src = URL.createObjectURL(await r.blob()); document.getElementById('qr').hidden = false; } } } catch (_) {}

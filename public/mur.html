@@ -19,7 +19,7 @@
   const grid = document.getElementById('grid'), empty = document.getElementById('empty'), count = document.getElementById('count');
   let cfg = { eventName: 'Le Mur', reactions: [] };
   try { cfg = await Mur.config(); } catch (_) {}
-  document.getElementById('evt').textContent = cfg.eventName;
+  Mur.brand(document.getElementById('evt'), cfg);
   document.title = cfg.eventName + ' — Le Mur';
   const opts = (isNew) => ({ isNew, reactions: cfg.reactions, onReact: react, onDelete: del });
 

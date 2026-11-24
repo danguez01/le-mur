@@ -12,6 +12,7 @@ et sur un écran de projection. Aucune application à installer, aucun compte.
 | `/mur` | Le mur en direct (réactions, suppression de ses propres posts) |
 | `/projection` | Mode TV plein écran (clic ou touche F), QR code intégré |
 | `/admin` | Modération, export zip, QR à imprimer (clé `ADMIN_KEY`) |
+| `/logo` | Logo de l'événement (public, 404 s'il n'y en a pas) |
 | `/qr.svg` | QR code d'invitation (contient le code de soirée) — réservé à l'admin |
 | `/healthz` | Test de santé |
 
@@ -56,6 +57,15 @@ Restart=always
 WantedBy=multi-user.target
 ```
 (`/etc/le-mur.env` contient `ADMIN_KEY=...`, droits 600.)
+
+## Logo de l'événement
+
+Depuis `/admin` (bloc « Logo de l'événement ») : choisir, enregistrer, retirer. PNG, JPEG ou WebP,
+1 Mo au plus, type vérifié sur le contenu du fichier ; **pas de SVG** (il peut contenir du code).
+L'image est réduite à 512 px de côté côté navigateur (transparence des PNG conservée). Un seul
+fichier, `DATA_DIR/logo.<ext>`, remplacé à chaque envoi, donc inclus dans la sauvegarde du dossier
+de données. `GET /logo` est public (il apparaît aussi sur la page « Soirée privée »). Affiché à
+gauche du nom de l'événement sur l'accueil invité, `/mur` et `/projection`. Sans logo, rien ne change.
 
 ## Règle d'écriture
 

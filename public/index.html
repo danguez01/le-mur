@@ -79,7 +79,7 @@
   let cfg = { eventName: 'La soirée', purgeDays: 30 };
   try { cfg = await Mur.config(); Mur.setGender(cfg.eventGender); } catch (_) {}
   document.title = cfg.eventName + ' — Le Mur';
-  $('evt').textContent = cfg.eventName; $('evt2').textContent = cfg.eventName;
+  Mur.brand($('evt'), cfg); Mur.brand($('evt2'), cfg);
   $('purge').textContent = cfg.purgeDays || 30;
 
   /* ----- Bienvenue ----- */

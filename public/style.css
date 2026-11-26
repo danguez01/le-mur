@@ -62,6 +62,21 @@ label.row{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:#d8d
 .empty{text-align:center;color:var(--muted);padding:80px 20px;font-size:18px}
 .fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:30;width:auto;padding:16px 22px}
 
+/* Mur en mode paysage : plusieurs rangées de cartes (nombre adapté à la hauteur de l'écran, voir mur.html), qui défilent vers la droite */
+.tools{display:flex;align-items:center;gap:8px}
+button.pill{color:#fff;cursor:pointer}
+body.land{overflow:hidden;height:100dvh;display:flex;flex-direction:column;--rows:2;--rh:calc((100dvh - 102px - 14px * (var(--rows) - 1)) / var(--rows))}
+body.land .grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(var(--rows),var(--rh));grid-auto-columns:calc(var(--rh) * .82);gap:14px;columns:auto;flex:1;min-height:0;max-width:none;margin:0;width:100%;padding:14px 16px 16px;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;align-content:start}
+body.land .pol{margin:0;height:var(--rh);display:flex;flex-direction:column;padding:6px 6px 7px;transform:rotate(calc(var(--rot,0deg) * .35))}
+body.land .pol img{flex:1 1 0;min-height:0;width:100%;height:100%;max-height:none;object-fit:cover}
+body.land .pol .cap{font-size:13px;margin:4px 3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.land .pol .who{font-size:11px;margin:3px 3px 0}
+body.land .pol .rx{flex-wrap:nowrap;overflow:hidden;gap:3px;margin:4px 0 0}
+body.land .pol .rx button{padding:2px 6px;font-size:12px;flex:0 0 auto}
+body.land .pol .del{top:-6px;right:-6px;width:24px;height:24px;font-size:12px}
+body.land .empty{padding:40px 20px}
+body.land .fab{padding:10px 16px;bottom:calc(8px + env(safe-area-inset-bottom))}
+
 /* Logo de l'événement (affiché seulement s'il existe) */
 .brand{display:flex;align-items:center;gap:.45em}
 .brandlogo{height:1.5em;width:auto;max-width:5em;object-fit:contain;flex:0 0 auto}

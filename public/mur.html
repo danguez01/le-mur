@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="topbar"><a href="/" id="evt">Le Mur</a><span class="pill" id="count">0</span></div>
+<div class="topbar"><a href="/" id="evt">Le Mur</a><span class="tools"><button class="pill" id="orient" type="button" aria-pressed="false">↔ Paysage</button><span class="pill" id="count">0</span></span></div>
 <div id="empty" class="empty" hidden>Le mur est vide… sois le premier à poster ! 📸</div>
 <main class="grid" id="grid"></main>
 <a class="btn fab" href="/">＋ Ajouter</a>
@@ -21,6 +21,24 @@
   try { cfg = await Mur.config(); } catch (_) {}
   Mur.brand(document.getElementById('evt'), cfg);
   document.title = cfg.eventName + ' — Le Mur';
+  // Affichage : colonnes verticales (par défaut) ou « paysage » (défilement horizontal, pour TV / tablette / téléphone couché)
+  const orient = document.getElementById('orient');
+  const setLand = (on, save) => {
+    document.body.classList.toggle('land', on);
+    orient.setAttribute('aria-pressed', on ? 'true' : 'false');
+    orient.textContent = on ? '↕ Portrait' : '↔ Paysage';
+    if (save) { try { localStorage.setItem('mur-vue', on ? 'paysage' : 'portrait'); } catch (_) {} }
+    grid.scrollLeft = 0; window.scrollTo(0, 0);
+  };
+  // Nombre de rangées selon la hauteur de l'écran : cartes d'environ 280 px de haut (téléphone : 1, TV 720p : 2, 1080p : 3)
+  const fit = () => document.body.style.setProperty('--rows', Math.max(1, Math.round((innerHeight - 116) / 280)));
+  fit(); addEventListener('resize', fit);
+  let pref = new URLSearchParams(location.search).get('vue');
+  if (!pref) { try { pref = localStorage.getItem('mur-vue'); } catch (_) {} }
+  setLand(pref === 'paysage', false);
+  orient.addEventListener('click', () => setLand(!document.body.classList.contains('land'), true));
+  // Molette verticale = défilement horizontal en mode paysage (souris de TV / ordinateur)
+  grid.addEventListener('wheel', (e) => { if (document.body.classList.contains('land') && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { grid.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   const opts = (isNew) => ({ isNew, reactions: cfg.reactions, onReact: react, onDelete: del });
 
   const refresh = () => { const n = grid.children.length; count.textContent = n + (n > 1 ? ' souvenirs' : ' souvenir'); empty.hidden = n > 0; };
